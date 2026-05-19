@@ -1,0 +1,15 @@
+# Built binary
+/vast-bucket-manager
+
+# Local Claude Code metadata
+/.claude/
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Per-user backup directory if someone symlinks it in
+/.vast-bucket-manager/
