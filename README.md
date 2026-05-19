@@ -52,6 +52,31 @@ Or run directly:
 go run .
 ```
 
+Run the tests:
+
+```
+go test ./...
+```
+
+## Layout
+
+```
+.
+├── main.go                # thin entry — just calls app.Run()
+├── internal/app/          # all app code (TUI, S3 client, validation, backup)
+│   ├── app.go             # three-pane app model + key routing + async cmds
+│   ├── editor.go          # editor sub-model (NORMAL/INSERT, validation)
+│   ├── modal.go           # manual-entry modal
+│   ├── panes.go           # pane rendering + styles + status/help line
+│   ├── policy.go          # JSON + IAM structural validation
+│   ├── s3client.go        # AWS SDK wrapper + profile discovery
+│   └── backup.go          # on-disk backup writer
+└── tests/                 # black-box tests against internal/app
+    ├── policy_test.go
+    ├── s3client_test.go
+    └── backup_test.go
+```
+
 ## Quick start
 
 1. Have a profile in `~/.aws/config` and `~/.aws/credentials`:

@@ -1,10 +1,12 @@
-package main
+package tests
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vastdata/vast-bucket-manager/internal/app"
 )
 
 func TestSanitizeEndpoint(t *testing.T) {
@@ -16,7 +18,7 @@ func TestSanitizeEndpoint(t *testing.T) {
 		"foo bar/baz":                                  "foo_bar_baz",
 	}
 	for in, want := range cases {
-		if got := sanitizeEndpoint(in); got != want {
+		if got := app.SanitizeEndpoint(in); got != want {
 			t.Errorf("sanitize(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -25,7 +27,7 @@ func TestSanitizeEndpoint(t *testing.T) {
 func TestWriteBackup(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	path, err := WriteBackup("https://s3.example.com", "my-bucket", "before-save", `{"Version":"2012-10-17"}`)
+	path, err := app.WriteBackup("https://s3.example.com", "my-bucket", "before-save", `{"Version":"2012-10-17"}`)
 	if err != nil {
 		t.Fatalf("WriteBackup: %v", err)
 	}
@@ -42,7 +44,7 @@ func TestWriteBackup(t *testing.T) {
 
 	// Empty content should be recorded as a marker, not silently produce
 	// an empty file (which would be ambiguous with "policy was empty string").
-	path2, err := WriteBackup("https://s3.example.com", "my-bucket", "before-delete", "")
+	path2, err := app.WriteBackup("https://s3.example.com", "my-bucket", "before-delete", "")
 	if err != nil {
 		t.Fatal(err)
 	}

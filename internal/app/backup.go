@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -15,9 +15,10 @@ var backupRoot = ".vast-bucket-manager"
 
 var endpointUnsafe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
-// sanitizeEndpoint turns "https://main.selab-var204.selab.vastdata.com/" into
-// a filename-safe segment "main.selab-var204.selab.vastdata.com".
-func sanitizeEndpoint(ep string) string {
+// SanitizeEndpoint turns "https://main.selab-var204.selab.vastdata.com/" into
+// a filename-safe segment "main.selab-var204.selab.vastdata.com". Exported
+// for the tests/ package; also used internally by backupDir.
+func SanitizeEndpoint(ep string) string {
 	ep = strings.TrimSpace(ep)
 	ep = strings.TrimPrefix(ep, "https://")
 	ep = strings.TrimPrefix(ep, "http://")
@@ -34,7 +35,7 @@ func backupDir(endpoint, bucket string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, backupRoot, sanitizeEndpoint(endpoint), bucket), nil
+	return filepath.Join(home, backupRoot, SanitizeEndpoint(endpoint), bucket), nil
 }
 
 // WriteBackup writes a timestamped snapshot of a policy. kind is a short

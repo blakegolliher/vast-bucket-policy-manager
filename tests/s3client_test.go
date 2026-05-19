@@ -1,9 +1,11 @@
-package main
+package tests
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/vastdata/vast-bucket-manager/internal/app"
 )
 
 // withFakeHome stubs $HOME so LoadProfileData reads from a controlled directory.
@@ -41,7 +43,7 @@ aws_secret_access_key = JO6Di1aROK6vtLK7oqBFYoQCZ6E/kWkAK985uShI
 `
 	withFakeHome(t, credentials, config)
 
-	pd := LoadProfileData("var204")
+	pd := app.LoadProfileData("var204")
 	if pd.Region != "us-east-1" {
 		t.Errorf("region = %q, want us-east-1", pd.Region)
 	}
@@ -67,7 +69,7 @@ aws_secret_access_key = SECRETEXAMPLE
 `
 	withFakeHome(t, credentials, config)
 
-	pd := LoadProfileData("default")
+	pd := app.LoadProfileData("default")
 	if pd.Region != "eu-west-1" {
 		t.Errorf("region = %q", pd.Region)
 	}
@@ -89,7 +91,7 @@ aws_access_key_id = X
 aws_secret_access_key = Y
 `
 	withFakeHome(t, credentials, config)
-	got := DiscoverProfiles()
+	got := app.DiscoverProfiles()
 	want := map[string]bool{"var204": true, "other": true}
 	for _, p := range got {
 		delete(want, p)
