@@ -54,11 +54,13 @@ type Client struct {
 func (c *Client) Endpoint() string { return c.endpoint }
 
 // NewClient builds an S3 client suitable for VAST or any S3-compatible store.
+//
+// Endpoint is optional: when blank, the AWS SDK falls back to whatever it
+// finds — shared-config endpoint_url if set, AWS defaults otherwise — so we
+// can speak to real AWS or to S3-compatible stores whose profiles configure
+// the endpoint in a format this tool's ini reader misses.
 func NewClient(ctx context.Context, c Connection) (*Client, error) {
 	c = c.Trim()
-	if c.Endpoint == "" {
-		return nil, errors.New("endpoint is required")
-	}
 	if c.Region == "" {
 		c.Region = "us-east-1"
 	}

@@ -180,12 +180,19 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case connectAttemptMsg:
 		if m.err != nil {
 			a.setStatus("connect failed: "+m.err.Error(), "err")
+			// Do NOT mutate a.currentProfile / a.client on failure — leave
+			// any prior successful connection's state intact.
 			return a, nil
 		}
 		a.client = m.client
+		a.currentProfile = m.profile // "" for manual entry
 		// Refresh the profiles list to mark the new connection.
 		a.profilesList.SetItems(formatProfiles(a.profiles, a.currentProfile))
-		a.setStatus(fmt.Sprintf("connected · %s", a.currentProfile), "ok")
+		who := a.currentProfile
+		if who == "" {
+			who = "manual"
+		}
+		a.setStatus(fmt.Sprintf("connected · %s", who), "ok")
 		// Auto-shift focus to buckets and load them.
 		a.setFocus(paneBuckets)
 		a.bucketsList.SetItems(nil)
@@ -273,7 +280,8 @@ func (a app) updateModal(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 	case manualSubmitMsg:
-		a.currentProfile = "" // manual entry isn't a profile
+		// Don't touch a.currentProfile / a.client until the attempt succeeds;
+		// connectAttemptMsg will overwrite them on success.
 		a.tlsSkip = m.conn.InsecureTLS
 		a.modal = nil
 		a.setStatus("connecting…", "")
@@ -294,7 +302,9 @@ func (a app) updateFocusedPane(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if k, ok := msg.(tea.KeyMsg); ok && k.String() == "enter" {
 			if it, ok := a.profilesList.SelectedItem().(simpleItem); ok {
 				name := rawProfileName(it.name)
-				a.currentProfile = name
+				// Don't set a.currentProfile here — the connect attempt
+				// may fail. connectAttemptMsg's success path is the only
+				// place that promotes the attempted profile to "current".
 				a.setStatus(fmt.Sprintf("connecting to %s…", name), "")
 				return a, cmdConnectProfile(a.ctx, name, a.tlsSkip)
 			}
@@ -473,12 +483,12 @@ func cmdConnectProfile(ctx context.Context, profile string, insecure bool) tea.C
 		}
 		cli, err := NewClient(ctx, conn)
 		if err != nil {
-			return connectAttemptMsg{err: err}
+			return connectAttemptMsg{profile: profile, err: err}
 		}
 		if _, err := cli.ListBuckets(ctx); err != nil {
-			return connectAttemptMsg{err: fmt.Errorf("test call failed: %w", err)}
+			return connectAttemptMsg{profile: profile, err: fmt.Errorf("test call failed: %w", err)}
 		}
-		return connectAttemptMsg{client: cli}
+		return connectAttemptMsg{profile: profile, client: cli}
 	}
 }
 
@@ -571,8 +581,9 @@ type bucketsLoadedMsg struct {
 }
 
 type connectAttemptMsg struct {
-	client *Client
-	err    error
+	client  *Client
+	profile string // the profile name the attempt was for; "" for manual entry
+	err     error
 }
 
 // Run starts the TUI program and blocks until the user quits.
