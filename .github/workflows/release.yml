@@ -1,0 +1,98 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          BIN=vast-bucket-policy-manager
+          OUT_DIR="dist/${BIN}_${GITHUB_REF_NAME}_${GOOS}_${GOARCH}"
+          mkdir -p "$OUT_DIR"
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+          go build -trimpath -ldflags="-s -w" -o "${OUT_DIR}/${BIN}${EXT}" .
+          cp README.md LICENSE "$OUT_DIR/"
+
+      - name: Package
+        id: pkg
+        run: |
+          set -euo pipefail
+          cd dist
+          DIR=$(ls -d */)
+          DIR=${DIR%/}
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -r "${DIR}.zip" "$DIR"
+            echo "asset=dist/${DIR}.zip" >> "$GITHUB_OUTPUT"
+          else
+            tar -czf "${DIR}.tar.gz" "$DIR"
+            echo "asset=dist/${DIR}.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ steps.pkg.outputs.asset }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
