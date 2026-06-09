@@ -46,6 +46,13 @@ func (f Finding) String() string {
 // ValidatePolicy runs JSON syntax + IAM structural checks on a bucket policy.
 // Returns findings sorted with errors first.
 func ValidatePolicy(src string) []Finding {
+	return ValidatePolicyForBucket(src, "")
+}
+
+// ValidatePolicyForBucket is ValidatePolicy plus checks that depend on the
+// bucket being edited: Resource ARNs must refer to that bucket. An empty
+// bucket skips those checks.
+func ValidatePolicyForBucket(src, bucket string) []Finding {
 	src = strings.TrimSpace(src)
 	if src == "" {
 		return []Finding{{Severity: SevError, Message: "policy is empty"}}
@@ -61,7 +68,7 @@ func ValidatePolicy(src string) []Finding {
 		return []Finding{{Severity: SevError, Message: "policy must be a JSON object: " + err.Error()}}
 	}
 
-	return checkPolicyStructure(raw)
+	return checkPolicyStructure(raw, bucket)
 }
 
 // findJSONError parses the source and pinpoints the byte offset of the syntax
@@ -104,7 +111,7 @@ func offsetToLineCol(src string, off int) (int, int) {
 	return line, col
 }
 
-func checkPolicyStructure(p map[string]any) []Finding {
+func checkPolicyStructure(p map[string]any, bucket string) []Finding {
 	var out []Finding
 
 	if v, ok := p["Version"]; !ok {
@@ -133,10 +140,10 @@ func checkPolicyStructure(p map[string]any) []Finding {
 				out = append(out, Finding{Severity: SevError, Path: fmt.Sprintf("Statement[%d]", i), Message: "must be an object"})
 				continue
 			}
-			out = append(out, checkStatement(obj, fmt.Sprintf("Statement[%d]", i))...)
+			out = append(out, checkStatement(obj, fmt.Sprintf("Statement[%d]", i), bucket)...)
 		}
 	case map[string]any:
-		out = append(out, checkStatement(s, "Statement")...)
+		out = append(out, checkStatement(s, "Statement", bucket)...)
 	default:
 		out = append(out, Finding{Severity: SevError, Path: "Statement", Message: "must be an object or array of objects"})
 	}
@@ -153,7 +160,7 @@ func checkPolicyStructure(p map[string]any) []Finding {
 	return out
 }
 
-func checkStatement(s map[string]any, path string) []Finding {
+func checkStatement(s map[string]any, path string, bucket string) []Finding {
 	var out []Finding
 
 	// Effect: required, must be Allow|Deny.
@@ -176,10 +183,10 @@ func checkStatement(s map[string]any, path string) []Finding {
 		out = append(out, Finding{Severity: SevError, Path: path, Message: "cannot have both Action and NotAction"})
 	}
 	if hasAct {
-		out = append(out, checkStringOrArray(s["Action"], path+".Action")...)
+		out = append(out, checkActions(s["Action"], path+".Action")...)
 	}
 	if hasNotAct {
-		out = append(out, checkStringOrArray(s["NotAction"], path+".NotAction")...)
+		out = append(out, checkActions(s["NotAction"], path+".NotAction")...)
 	}
 
 	// Resource vs NotResource: exactly one required for bucket policies.
@@ -192,10 +199,12 @@ func checkStatement(s map[string]any, path string) []Finding {
 		out = append(out, Finding{Severity: SevError, Path: path, Message: "cannot have both Resource and NotResource"})
 	}
 	if hasRes {
-		out = append(out, checkStringOrArray(s["Resource"], path+".Resource")...)
+		out = append(out, checkResources(s["Resource"], path+".Resource", bucket)...)
 	}
 	if hasNotRes {
-		out = append(out, checkStringOrArray(s["NotResource"], path+".NotResource")...)
+		// NotResource semantics are inverted, so only check ARN shape, not
+		// that it names the current bucket.
+		out = append(out, checkResources(s["NotResource"], path+".NotResource", "")...)
 	}
 
 	// Principal vs NotPrincipal: required for bucket policies (resource-based).
@@ -260,6 +269,152 @@ func checkStringOrArray(v any, path string) []Finding {
 	default:
 		return []Finding{{Severity: SevError, Path: path, Message: "must be a string or array of strings"}}
 	}
+}
+
+// s3ActionNames is the set of known S3 actions (lowercased, without the
+// "s3:" prefix) for validating Action/NotAction entries.
+var s3ActionNames = map[string]bool{
+	"abortmultipartupload": true, "bypassgovernanceretention": true,
+	"createbucket": true, "deletebucket": true, "deletebucketpolicy": true,
+	"deletebucketwebsite": true, "deleteobject": true, "deleteobjecttagging": true,
+	"deleteobjectversion": true, "deleteobjectversiontagging": true,
+	"getaccelerateconfiguration": true, "getanalyticsconfiguration": true,
+	"getbucketacl": true, "getbucketcors": true, "getbucketlocation": true,
+	"getbucketlogging": true, "getbucketnotification": true,
+	"getbucketobjectlockconfiguration": true, "getbucketownershipcontrols": true,
+	"getbucketpolicy": true, "getbucketpolicystatus": true,
+	"getbucketpublicaccessblock": true, "getbucketrequestpayment": true,
+	"getbuckettagging": true, "getbucketversioning": true, "getbucketwebsite": true,
+	"getencryptionconfiguration": true, "getintelligenttieringconfiguration": true,
+	"getinventoryconfiguration": true, "getlifecycleconfiguration": true,
+	"getmetricsconfiguration": true, "getobject": true, "getobjectacl": true,
+	"getobjectattributes": true, "getobjectlegalhold": true,
+	"getobjectretention": true, "getobjecttagging": true, "getobjecttorrent": true,
+	"getobjectversion": true, "getobjectversionacl": true,
+	"getobjectversionattributes": true, "getobjectversionforreplication": true,
+	"getobjectversiontagging": true, "getobjectversiontorrent": true,
+	"getreplicationconfiguration": true, "initiatereplication": true,
+	"listallmybuckets": true, "listbucket": true, "listbucketmultipartuploads": true,
+	"listbucketversions": true, "listmultipartuploadparts": true,
+	"objectowneroverridetobucketowner": true, "putaccelerateconfiguration": true,
+	"putanalyticsconfiguration": true, "putbucketacl": true, "putbucketcors": true,
+	"putbucketlogging": true, "putbucketnotification": true,
+	"putbucketobjectlockconfiguration": true, "putbucketownershipcontrols": true,
+	"putbucketpolicy": true, "putbucketpublicaccessblock": true,
+	"putbucketrequestpayment": true, "putbuckettagging": true,
+	"putbucketversioning": true, "putbucketwebsite": true,
+	"putencryptionconfiguration": true, "putintelligenttieringconfiguration": true,
+	"putinventoryconfiguration": true, "putlifecycleconfiguration": true,
+	"putmetricsconfiguration": true, "putobject": true, "putobjectacl": true,
+	"putobjectlegalhold": true, "putobjectretention": true,
+	"putobjecttagging": true, "putobjectversionacl": true,
+	"putobjectversiontagging": true, "putreplicationconfiguration": true,
+	"replicatedelete": true, "replicateobject": true, "replicatetags": true,
+	"restoreobject": true,
+}
+
+// checkActions validates Action/NotAction values: shape, "s3:" prefix, and
+// that the action name (after wildcard expansion) is a known S3 action.
+func checkActions(v any, path string) []Finding {
+	out := checkStringOrArray(v, path)
+	forEachString(v, path, func(a, p string) {
+		if a == "" || a == "*" {
+			return
+		}
+		svc, name, ok := strings.Cut(a, ":")
+		if !ok {
+			out = append(out, Finding{Severity: SevError, Path: p, Message: fmt.Sprintf("%q is not a valid action; expected \"s3:ActionName\"", a)})
+			return
+		}
+		if !strings.EqualFold(svc, "s3") {
+			out = append(out, Finding{Severity: SevError, Path: p, Message: fmt.Sprintf("%q: bucket policies only support s3: actions", a)})
+			return
+		}
+		if !knownS3Action(name) {
+			out = append(out, Finding{Severity: SevError, Path: p, Message: fmt.Sprintf("unknown S3 action %q", a)})
+		}
+	})
+	return out
+}
+
+// knownS3Action reports whether name (which may contain * and ? wildcards)
+// matches at least one known S3 action. Matching is case-insensitive, like IAM.
+func knownS3Action(name string) bool {
+	name = strings.ToLower(name)
+	if !strings.ContainsAny(name, "*?") {
+		return s3ActionNames[name]
+	}
+	for known := range s3ActionNames {
+		if wildcardMatch(name, known) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkResources validates Resource/NotResource values: shape, S3 ARN format,
+// and (when bucket is non-empty) that the ARN refers to that bucket.
+func checkResources(v any, path, bucket string) []Finding {
+	const arnPrefix = "arn:aws:s3:::"
+	out := checkStringOrArray(v, path)
+	forEachString(v, path, func(r, p string) {
+		if r == "" {
+			return
+		}
+		if !strings.HasPrefix(r, arnPrefix) || r == arnPrefix {
+			out = append(out, Finding{Severity: SevError, Path: p, Message: fmt.Sprintf("%q is not an S3 ARN; expected \"arn:aws:s3:::bucket\" or \"arn:aws:s3:::bucket/key\"", r)})
+			return
+		}
+		if bucket == "" {
+			return
+		}
+		resBucket, _, _ := strings.Cut(strings.TrimPrefix(r, arnPrefix), "/")
+		if !wildcardMatch(resBucket, bucket) {
+			out = append(out, Finding{Severity: SevError, Path: p, Message: fmt.Sprintf("resource names bucket %q but this policy is for bucket %q", resBucket, bucket)})
+		}
+	})
+	return out
+}
+
+// forEachString calls fn for each string in a string-or-array value, with the
+// element's path. Shape errors are left to checkStringOrArray.
+func forEachString(v any, path string, fn func(s, path string)) {
+	switch t := v.(type) {
+	case string:
+		fn(t, path)
+	case []any:
+		for i, e := range t {
+			if s, ok := e.(string); ok {
+				fn(s, fmt.Sprintf("%s[%d]", path, i))
+			}
+		}
+	}
+}
+
+// wildcardMatch reports whether s matches pattern, where '*' matches any run
+// of characters and '?' matches exactly one.
+func wildcardMatch(pattern, s string) bool {
+	pi, si := 0, 0
+	star, starSi := -1, 0
+	for si < len(s) {
+		switch {
+		case pi < len(pattern) && (pattern[pi] == '?' || pattern[pi] == s[si]):
+			pi++
+			si++
+		case pi < len(pattern) && pattern[pi] == '*':
+			star, starSi = pi, si
+			pi++
+		case star >= 0:
+			starSi++
+			pi, si = star+1, starSi
+		default:
+			return false
+		}
+	}
+	for pi < len(pattern) && pattern[pi] == '*' {
+		pi++
+	}
+	return pi == len(pattern)
 }
 
 func checkPrincipal(v any, path string) []Finding {

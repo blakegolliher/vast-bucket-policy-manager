@@ -312,7 +312,7 @@ func (m *editorModel) refreshFindings() {
 		m.findings = nil
 		return
 	}
-	m.findings = ValidatePolicy(v)
+	m.findings = ValidatePolicyForBucket(v, m.bucket)
 }
 
 func (m *editorModel) formatBuffer() {

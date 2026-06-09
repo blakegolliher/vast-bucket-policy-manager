@@ -88,11 +88,114 @@ func TestValidatePolicy_SingleStatementObject(t *testing.T) {
       "Version": "2012-10-17",
       "Statement": {
         "Effect":"Allow","Principal":"*",
-        "Action":"s3:GetObject","Resource":"*"
+        "Action":"s3:GetObject","Resource":"arn:aws:s3:::mybucket/*"
       }
     }`
 	f := app.ValidatePolicy(policy)
 	if app.HasErrors(f) {
 		t.Fatalf("expected single-statement-object to be valid, got %v", f)
+	}
+}
+
+func TestValidatePolicy_UnknownAction(t *testing.T) {
+	policy := `{
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect":"Allow","Principal":"*",
+        "Action":"s3:NotAReal","Resource":"arn:aws:s3:::mybucket/*"
+      }]
+    }`
+	f := app.ValidatePolicy(policy)
+	if !app.HasErrors(f) {
+		t.Fatalf("expected error for unknown action s3:NotAReal, got %v", f)
+	}
+}
+
+func TestValidatePolicy_ActionWildcards(t *testing.T) {
+	for _, a := range []string{"*", "s3:*", "s3:Get*", "s3:GETOBJECT"} {
+		policy := `{
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect":"Allow","Principal":"*",
+            "Action":"` + a + `","Resource":"arn:aws:s3:::mybucket/*"
+          }]
+        }`
+		if f := app.ValidatePolicy(policy); app.HasErrors(f) {
+			t.Errorf("action %q: expected no errors, got %v", a, f)
+		}
+	}
+	// A wildcard that matches no known action is still an error.
+	policy := `{
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect":"Allow","Principal":"*",
+        "Action":"s3:NotAReal*","Resource":"arn:aws:s3:::mybucket/*"
+      }]
+    }`
+	if f := app.ValidatePolicy(policy); !app.HasErrors(f) {
+		t.Errorf("expected error for s3:NotAReal*, got %v", f)
+	}
+}
+
+func TestValidatePolicy_NonS3Action(t *testing.T) {
+	policy := `{
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect":"Allow","Principal":"*",
+        "Action":"iam:PassRole","Resource":"arn:aws:s3:::mybucket/*"
+      }]
+    }`
+	f := app.ValidatePolicy(policy)
+	if !app.HasErrors(f) {
+		t.Fatalf("expected error for non-s3 action, got %v", f)
+	}
+}
+
+func TestValidatePolicy_BadResourceARN(t *testing.T) {
+	for _, r := range []string{"*", "mybucket", "arn:aws:s3:::"} {
+		policy := `{
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect":"Allow","Principal":"*",
+            "Action":"s3:GetObject","Resource":"` + r + `"
+          }]
+        }`
+		if f := app.ValidatePolicy(policy); !app.HasErrors(f) {
+			t.Errorf("resource %q: expected ARN format error, got %v", r, f)
+		}
+	}
+}
+
+func TestValidatePolicyForBucket_ResourceMismatch(t *testing.T) {
+	policy := `{
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect":"Allow","Principal":"*",
+        "Action":"s3:GetObject",
+        "Resource":["arn:aws:s3:::otherbucket","arn:aws:s3:::otherbucket/*"]
+      }]
+    }`
+	f := app.ValidatePolicyForBucket(policy, "mybucket")
+	if !app.HasErrors(f) {
+		t.Fatalf("expected errors for resource bucket mismatch, got %v", f)
+	}
+	// Same policy validated without a bucket context is fine.
+	if f := app.ValidatePolicy(policy); app.HasErrors(f) {
+		t.Fatalf("expected no errors without bucket context, got %v", f)
+	}
+}
+
+func TestValidatePolicyForBucket_ResourceMatch(t *testing.T) {
+	policy := `{
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect":"Allow","Principal":"*",
+        "Action":"s3:GetObject",
+        "Resource":["arn:aws:s3:::mybucket","arn:aws:s3:::mybucket/*","arn:aws:s3:::my*"]
+      }]
+    }`
+	f := app.ValidatePolicyForBucket(policy, "mybucket")
+	if app.HasErrors(f) {
+		t.Fatalf("expected no errors for matching bucket, got %v", f)
 	}
 }
