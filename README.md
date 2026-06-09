@@ -216,4 +216,4 @@ Toggle off with `Ctrl+T` if you'd like to confirm a real chain.
 
 ## License
 
-Internal — vetting only.
+MIT — see [LICENSE](LICENSE).
