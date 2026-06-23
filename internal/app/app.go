@@ -35,7 +35,7 @@ type app struct {
 
 	// status displayed in the bottom bar; cleared on next action
 	status     string
-	statusKind string // "", "ok", "err", "warn"
+	statusKind string // "", "ok", "err"
 
 	width, height int
 	ctx           context.Context

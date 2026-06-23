@@ -50,12 +50,6 @@ aws_secret_access_key = JO6Di1aROK6vtLK7oqBFYoQCZ6E/kWkAK985uShI
 	if pd.Endpoint != "https://main.selab-var204.selab.vastdata.com" {
 		t.Errorf("endpoint = %q, want https://main.selab-var204.selab.vastdata.com", pd.Endpoint)
 	}
-	if pd.AccessKey != "AAPHD13RSSKQ53355Y58" {
-		t.Errorf("access key = %q, want AAPHD13RSSKQ53355Y58", pd.AccessKey)
-	}
-	if pd.SecretKey == "" {
-		t.Errorf("secret key missing")
-	}
 }
 
 func TestLoadProfileData_DefaultSectionName(t *testing.T) {

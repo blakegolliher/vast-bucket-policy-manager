@@ -19,12 +19,12 @@ type manualEntry struct {
 }
 
 const (
-	mEndpoint  = 0
-	mAccessKey = 1
-	mSecretKey = 2
-	mRegion    = 3
-	mInsecure  = 4
-	mSubmit    = 5
+	mEndpoint   = 0
+	mAccessKey  = 1
+	mSecretKey  = 2
+	mRegion     = 3
+	mInsecure   = 4
+	mSubmit     = 5
 	mFocusSlots = 6
 	mNumInputs  = 4
 )

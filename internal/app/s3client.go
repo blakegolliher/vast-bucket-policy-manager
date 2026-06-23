@@ -107,12 +107,12 @@ func NewClient(ctx context.Context, c Connection) (*Client, error) {
 }
 
 // ProfileData are the fields we surface in the UI when the user picks an AWS
-// profile, read from the shared config and credentials files.
+// profile, read from the shared config and credentials files. Credentials
+// themselves aren't read here — the SDK loads them via the shared-config
+// profile when the client is built.
 type ProfileData struct {
-	Region      string
-	Endpoint    string
-	AccessKey   string
-	SecretKey   string
+	Region   string
+	Endpoint string
 }
 
 // LoadProfileData reads a named profile from ~/.aws/{credentials,config}.
@@ -131,8 +131,6 @@ func LoadProfileData(name string) ProfileData {
 	// ~/.aws/credentials: plain section names, no "profile " prefix.
 	if f, err := ini.Load(filepath.Join(home, ".aws", "credentials")); err == nil {
 		if s, err := f.GetSection(name); err == nil {
-			pd.AccessKey = s.Key("aws_access_key_id").String()
-			pd.SecretKey = s.Key("aws_secret_access_key").String()
 			pd.Region = s.Key("region").String()
 		}
 	}

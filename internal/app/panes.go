@@ -49,7 +49,6 @@ var (
 	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	statusErrStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	statusOKStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	statusWarnStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	statusBadgeOn    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("214")).Padding(0, 1)
 	statusBadgeOff   = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("240")).Padding(0, 1)
 	statusConnected  = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
@@ -119,8 +118,6 @@ func statusBarLine(width int, connected bool, profile string, tlsSkip bool, msg 
 			s = statusErrStyle
 		case "ok":
 			s = statusOKStyle
-		case "warn":
-			s = statusWarnStyle
 		default:
 			s = statusStyle
 		}
